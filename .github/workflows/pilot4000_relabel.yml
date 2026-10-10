@@ -1,0 +1,41 @@
+name: pilot-relabel-4000
+on:
+  workflow_dispatch:
+
+jobs:
+  pilot4000:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Show machine
+        run: |
+          nproc
+          g++ --version | head -1
+
+      - name: Build frozen teacher engine
+        run: |
+          g++ -std=c++17 -O2 -ffp-contract=off -pthread engine_build11_bitboard.cpp -o frozen_hce
+          chmod +x frozen_hce
+
+      - name: Relabel 4000 positions (16384 nodes, 4 workers)
+        run: |
+          mkdir -p out
+          start=$(date +%s)
+          python3 deep_label_positions.py --shard pilot4000_shard.jsonl.gz --engine ./frozen_hce --chunk-index 0 --positions-per-chunk 4000 --nodes 16384 --workers 4 --hash-mb 32 --out out/pilot4000_labels.jsonl.gz --report out/pilot4000_report.txt
+          echo "wall_seconds=$(( $(date +%s) - start ))" >> out/pilot4000_report.txt
+          cat out/pilot4000_report.txt
+
+      - name: Compare content with reference
+        run: |
+          got=$(zcat out/pilot4000_labels.jsonl.gz | sha256sum | cut -d' ' -f1)
+          expected=9edad8a2b4faf0c2a2c2d2b402043c2a5d5427011cb4601387b9e7368587f6a9
+          echo "got      = $got" | tee -a out/pilot4000_report.txt
+          echo "expected = $expected" | tee -a out/pilot4000_report.txt
+          if [ "$got" = "$expected" ]; then echo "MATCH: identical labels" | tee -a out/pilot4000_report.txt; else echo "DIFFERENT labels" | tee -a out/pilot4000_report.txt; fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pilot4000-results
+          path: out/
