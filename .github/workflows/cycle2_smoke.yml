@@ -17,7 +17,7 @@ jobs:
           python3 -m pip install --quiet --break-system-packages python-chess
           g++ -std=c++17 -O2 -ffp-contract=off -pthread engine_build11_kb8_wdl_candidate.cpp -o cand
           chmod +x cand
-      - name: Self-play shard ${{ matrix.shard }} (smoke: 3000 positions, 2 workers)
+      - name: "Self-play shard ${{ matrix.shard }} - smoke 3000 positions, 2 workers"
         run: |
           python3 run_selfplay_parallel.py --engine ./cand --eval-file kb8_twohead_v2.nnue --positions 3000 --workers 2 --nodes 8192 --seed $((20261010 + ${{ matrix.shard }} * 1000)) --opening-plies-min 8 --opening-plies-max 12 --early-ply-jitter 15 --discard-before-ply 24 --max-plies 200 --out-dir shards_${{ matrix.shard }} --raw-dir raw_${{ matrix.shard }}
           mv raw_${{ matrix.shard }}/raw_shard.jsonl.gz raw_shard_${{ matrix.shard }}.jsonl.gz
