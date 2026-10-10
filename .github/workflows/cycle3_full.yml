@@ -1,0 +1,100 @@
+name: cycle3-full
+on:
+  workflow_dispatch:
+
+jobs:
+  selfplay:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3, 4, 5, 6, 7]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup
+        run: |
+          python3 -m pip install --quiet --break-system-packages python-chess
+          g++ -std=c++17 -O2 -ffp-contract=off -pthread engine_build11_kb8_wdl_candidate.cpp -o cand
+          chmod +x cand
+      - name: "Self-play shard ${{ matrix.shard }} - 375000 positions, 4 workers"
+        run: |
+          python3 run_selfplay_parallel.py --engine ./cand --eval-file kb8_twohead_v2.nnue --positions 375000 --workers 4 --nodes 8192 --seed $((20261010 + ${{ matrix.shard }} * 1000)) --opening-plies-min 8 --opening-plies-max 12 --early-ply-jitter 15 --discard-before-ply 24 --max-plies 200 --out-dir shards_${{ matrix.shard }} --raw-dir raw_${{ matrix.shard }}
+          mv raw_${{ matrix.shard }}/raw_shard.jsonl.gz raw_shard_${{ matrix.shard }}.jsonl.gz
+          zcat raw_shard_${{ matrix.shard }}.jsonl.gz | wc -l
+      - uses: actions/upload-artifact@v4
+        with:
+          name: raw-${{ matrix.shard }}
+          path: raw_shard_${{ matrix.shard }}.jsonl.gz
+
+  label:
+    needs: selfplay
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    strategy:
+      fail-fast: false
+      matrix:
+        chunk: [0, 1, 2, 3, 4, 5, 6, 7]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: raw-*
+          path: raw
+          merge-multiple: true
+      - name: Build own-search teacher (candidate engine)
+        run: |
+          g++ -std=c++17 -O2 -ffp-contract=off -pthread engine_build11_kb8_wdl_candidate.cpp -o cand
+          chmod +x cand
+      - name: Concatenate raw and label chunk ${{ matrix.chunk }}
+        run: |
+          cat raw/raw_shard_*.jsonl.gz > all_raw.jsonl.gz
+          total=$(zcat all_raw.jsonl.gz | wc -l)
+          echo "total raw records: $total"
+          per=$(( (total + 7) / 8 ))
+          mkdir -p chunks
+          python3 deep_label_selfnet.py --shard all_raw.jsonl.gz --engine ./cand --eval-file kb8_twohead_v2.nnue --chunk-index ${{ matrix.chunk }} --positions-per-chunk $per --nodes 16384 --workers 4 --hash-mb 32 --out chunks/deep_labels_chunk${{ matrix.chunk }}.jsonl.gz --report chunks/deep_label_report_${{ matrix.chunk }}.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: label-${{ matrix.chunk }}
+          path: chunks/
+
+  train-and-match:
+    needs: label
+    runs-on: ubuntu-latest
+    timeout-minutes: 330
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: label-*
+          path: labels
+          merge-multiple: true
+      - name: Setup
+        run: |
+          python3 -m pip install --quiet --break-system-packages numpy python-chess
+          python3 -m pip install --quiet --break-system-packages torch --index-url https://download.pytorch.org/whl/cpu
+          g++ -std=c++17 -O2 -ffp-contract=off -pthread engine_build11_kb8_wdl_candidate.cpp -o cand
+          g++ -std=c++17 -O2 -ffp-contract=off -pthread engine_build11_bitboard.cpp -o frozen_hce
+          chmod +x cand frozen_hce
+          ls -la labels
+      - name: Merge labels
+        run: |
+          python3 merge_deep_labels.py --dir labels --out-dir labeled_merged
+      - name: Train (hidden 16, dropout 0.1, wd 1e-4, 12 epochs)
+        run: |
+          python3 train_kb8_deep_v4.py labeled_merged --out nnue_c2 --hidden 16 --dropout 0.1 --wd 1e-4 --epochs 12 --restarts 1 --batch-size 512 --threads 4
+      - name: Convert, export, parity
+        run: |
+          python3 adapt_h16_to_v2.py nnue_c2/best_deep_v4.pt --out nnue_c2/best_kb8_twohead_v2.pt
+          python3 export_kb8_twohead_v2.py nnue_c2/best_kb8_twohead_v2.pt --out nnue_c2/kb8_twohead_v2.nnue --force
+          python3 verify_kb8_wdl_v1.py --engine ./cand --network nnue_c2/kb8_twohead_v2.nnue --checkpoint nnue_c2/best_kb8_twohead_v2.pt --report nnue_c2/parity_report.txt
+      - name: Match (100 pairs = 200 games, cap 200)
+        run: |
+          python3 play_kb8_wdl_smoke.py --baseline ./frozen_hce --baseline-source engine_build11_bitboard.cpp --candidate ./cand --network nnue_c2/kb8_twohead_v2.nnue --pairs 100 --nodes 8192 --max-plies 200 --hash-mb 32 --seed 20261010 --report nnue_c2/match_200.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cycle3-full-results
+          path: |
+            nnue_c2/
+            labeled_merged/
