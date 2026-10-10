@@ -19,7 +19,7 @@ jobs:
           chmod +x cand
       - name: "Self-play shard ${{ matrix.shard }} - 375000 positions, 4 workers"
         run: |
-          python3 run_selfplay_parallel.py --engine ./cand --eval-file kb8_twohead_v2.nnue --positions 375000 --workers 4 --nodes 8192 --seed $((20261010 + ${{ matrix.shard }} * 1000)) --opening-plies-min 8 --opening-plies-max 12 --early-ply-jitter 15 --discard-before-ply 24 --max-plies 200 --out-dir shards_${{ matrix.shard }} --raw-dir raw_${{ matrix.shard }}
+          python3 run_selfplay_parallel.py --engine ./cand --eval-file kb8_twohead_v2.nnue --positions 375000 --workers 4 --nodes 8192 --seed $((20270101 + ${{ matrix.shard }} * 1000)) --opening-plies-min 8 --opening-plies-max 12 --early-ply-jitter 15 --discard-before-ply 24 --max-plies 200 --out-dir shards_${{ matrix.shard }} --raw-dir raw_${{ matrix.shard }}
           mv raw_${{ matrix.shard }}/raw_shard.jsonl.gz raw_shard_${{ matrix.shard }}.jsonl.gz
           zcat raw_shard_${{ matrix.shard }}.jsonl.gz | wc -l
       - uses: actions/upload-artifact@v4
