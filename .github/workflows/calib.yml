@@ -1,0 +1,46 @@
+name: calib-openings
+
+# Run once before datagen. Produces opening_pool_calibrated.txt as an artifact.
+# Download the artifact and upload that file into  via the web interface.
+on:
+  workflow_dispatch:
+    inputs:
+      nodes:
+        description: "nodes per opening check"
+        required: true
+        default: "10000"
+
+jobs:
+  calib:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install python-chess
+        run: pip install python-chess
+
+      - name: Build engine
+        run: g++ -std=c++17 -O2 -pthread build_1.2.cpp -o eng
+
+      - name: Check and filter openings
+        run: |
+          python3 check_openings.py \
+            --engine eng \
+            --pool opening_pool_0001.txt \
+            --nodes "${{ github.event.inputs.nodes }}" \
+            --max_cp 100 \
+            --out_dir .
+
+      - name: Upload calibrated pool
+        uses: actions/upload-artifact@v4
+        with:
+          name: opening-pool-calibrated
+          path: |
+            opening_pool_calibrated.txt
+            openings_report.json
+          retention-days: 30
