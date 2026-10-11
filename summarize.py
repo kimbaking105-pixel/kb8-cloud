@@ -1,7 +1,7 @@
-import glob, math, re
+import glob, math, re, os
 W = D = L = 0
 parts = []
-for path in sorted(glob.glob("results/match_*.txt")):
+for path in sorted(glob.glob("results/**/match_*.txt", recursive=True)):
     with open(path, encoding="utf-8") as f:
         first = f.readline()
     m = re.search(r"cand_W=(\d+) D=(\d+) cand_L=(\d+)", first)
@@ -25,5 +25,10 @@ lines = [
     f"approx_z={z:.2f} (accept needs clearly positive z, e.g. >= 2)",
     "",
 ] + parts
+speed = glob.glob("results/**/speed.txt", recursive=True)
+if speed:
+    lines += ["", "--- speed check ---"] + open(speed[0], encoding="utf-8").read().splitlines()
+else:
+    lines += ["", "--- speed check: NO FILE ---"]
 open("summary.txt", "w", encoding="utf-8").write("\n".join(lines) + "\n")
 print("\n".join(lines))
