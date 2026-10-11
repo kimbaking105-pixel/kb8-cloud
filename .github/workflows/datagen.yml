@@ -1,0 +1,70 @@
+name: datagen
+
+# Manual start only (Actions -> datagen -> Run workflow).
+on:
+  workflow_dispatch:
+    inputs:
+      games_per_shard:
+        description: "games per shard (16 shards)"
+        required: true
+        default: "2000"
+      nodes:
+        description: "nodes per move"
+        required: true
+        default: "10000"
+
+jobs:
+  shard:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install python-chess
+        run: pip install python-chess
+
+      - name: Build engine
+        run: g++ -std=c++17 -O2 -pthread build_1.2.cpp -o eng
+
+      - name: Pick opening pool
+        id: pool
+        run: |
+          if [ -f opening_pool_calibrated.txt ]; then
+            echo "path=opening_pool_calibrated.txt" >> "$GITHUB_OUTPUT"
+          else
+            echo "path=opening_pool_0001.txt" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Self-play (fixed nodes, no adjudication)
+        run: |
+          python3 play_games.py \
+            --engine eng \
+            --pool "${{ steps.pool.outputs.path }}" \
+            --games "${{ github.event.inputs.games_per_shard }}" \
+            --nodes "${{ github.event.inputs.nodes }}" \
+            --seed "${{ matrix.shard }}" \
+            --max_plies 600 \
+            --out shard_${{ matrix.shard }}.jsonl
+
+      - name: Extract quiet positions
+        run: |
+          python3 extract.py \
+            --inp shard_${{ matrix.shard }}.jsonl \
+            --out positions_${{ matrix.shard }}.tsv.gz
+
+      - name: Upload shard
+        uses: actions/upload-artifact@v4
+        with:
+          name: shard-${{ matrix.shard }}
+          path: |
+            positions_${{ matrix.shard }}.tsv.gz
+            shard_${{ matrix.shard }}.jsonl
+          retention-days: 30
