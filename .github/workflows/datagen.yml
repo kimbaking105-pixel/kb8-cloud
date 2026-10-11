@@ -46,7 +46,7 @@ jobs:
       - name: Self-play (fixed nodes, no adjudication)
         run: |
           python3 play_games.py \
-            --engine eng \
+            --engine ./eng \
             --pool "${{ steps.pool.outputs.path }}" \
             --games "${{ github.event.inputs.games_per_shard }}" \
             --nodes "${{ github.event.inputs.nodes }}" \
