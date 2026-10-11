@@ -1,0 +1,47 @@
+name: patch-match-2
+on:
+  workflow_dispatch:
+
+jobs:
+  match:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup
+        run: |
+          python3 -m pip install --quiet --break-system-packages python-chess
+          g++ -std=c++17 -O2 -pthread engine_base.cpp -o base
+          g++ -std=c++17 -O2 -pthread engine_rfp.cpp -o cand
+          chmod +x base cand
+      - name: Match shard ${{ matrix.shard }} (64 pairs = 128 games)
+        run: |
+          mkdir -p results/shard
+          python3 run_match.py ./base ./cand 64 8192 200 $((4000 + ${{ matrix.shard }})) results/shard/match_${{ matrix.shard }}.txt
+          head -1 results/shard/match_${{ matrix.shard }}.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: match-${{ matrix.shard }}
+          path: results/shard/match_${{ matrix.shard }}.txt
+
+  summary:
+    needs: match
+    if: always()
+    runs-on: ubuntu-latest
+    env:
+      PRIOR_WDL: "620 425 555"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: results
+      - name: Summary
+        run: python3 summarize.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: patch-match-2-summary
+          path: summary.txt
