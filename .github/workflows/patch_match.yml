@@ -16,12 +16,12 @@ jobs:
         run: |
           python3 -m pip install --quiet --break-system-packages python-chess
           g++ -std=c++17 -O2 -pthread engine_base.cpp -o base
-          g++ -std=c++17 -O2 -pthread engine_mdp.cpp -o cand
+          g++ -std=c++17 -O2 -pthread engine_rfp.cpp -o cand
           chmod +x base cand
       - name: Match shard ${{ matrix.shard }} (50 pairs = 100 games)
         run: |
           mkdir -p results/shard
-          python3 run_match.py ./base ./cand 50 8192 200 $((2000 + ${{ matrix.shard }})) results/shard/match_${{ matrix.shard }}.txt
+          python3 run_match.py ./base ./cand 50 8192 200 $((3000 + ${{ matrix.shard }})) results/shard/match_${{ matrix.shard }}.txt
           head -1 results/shard/match_${{ matrix.shard }}.txt
       - uses: actions/upload-artifact@v4
         with:
@@ -36,7 +36,7 @@ jobs:
       - name: Build and speed check
         run: |
           g++ -std=c++17 -O2 -pthread engine_base.cpp -o base
-          g++ -std=c++17 -O2 -pthread engine_mdp.cpp -o cand
+          g++ -std=c++17 -O2 -pthread engine_rfp.cpp -o cand
           chmod +x base cand
           mkdir -p results/speed
           python3 speed_check.py ./base ./cand results/speed/speed.txt
