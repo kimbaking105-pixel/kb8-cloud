@@ -1,0 +1,87 @@
+name: match
+
+# Manual start. Fixed-node match A vs B with colour-swapped openings.
+# Leave a_weights / b_weights empty for HCE v1 engines (build_1.2).
+# For HCE v2 give the repo path of the weights file, e.g. hce2/weights_v1.txt
+# Source files: build_1.2.cpp or build_2_dev.cpp.
+on:
+  workflow_dispatch:
+    inputs:
+      a_source:
+        description: "engine A source file (repo path)"
+        required: true
+        default: "build_2_dev.cpp"
+      b_source:
+        description: "engine B source file (repo path)"
+        required: true
+        default: "build_1.2.cpp"
+      a_weights:
+        description: "weights for A (repo path), empty for v1"
+        required: false
+        default: ""
+      b_weights:
+        description: "weights for B (repo path), empty for v1"
+        required: false
+        default: ""
+      pairs:
+        description: "openings (each played twice)"
+        required: true
+        default: "500"
+      nodes:
+        description: "nodes per move, same for both"
+        required: true
+        default: "10000"
+      seed:
+        description: "opening seed"
+        required: true
+        default: "7"
+
+jobs:
+  match:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install python-chess
+        run: pip install python-chess
+
+      - name: Build engines
+        run: |
+          g++ -std=c++17 -O2 -pthread "${{ github.event.inputs.a_source }}" -o eng_a
+          g++ -std=c++17 -O2 -pthread "${{ github.event.inputs.b_source }}" -o eng_b
+
+      - name: Pick opening pool
+        id: pool
+        run: |
+          if [ -f opening_pool_calibrated.txt ]; then
+            echo "path=opening_pool_calibrated.txt" >> "$GITHUB_OUTPUT"
+          else
+            echo "path=opening_pool_0001.txt" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Run match
+        run: |
+          WA=""; WB=""
+          if [ -n "${{ github.event.inputs.a_weights }}" ]; then WA="--wa $GITHUB_WORKSPACE/${{ github.event.inputs.a_weights }}"; fi
+          if [ -n "${{ github.event.inputs.b_weights }}" ]; then WB="--wb $GITHUB_WORKSPACE/${{ github.event.inputs.b_weights }}"; fi
+          python3 match.py \
+            --a "$GITHUB_WORKSPACE/eng_a" \
+            --b "$GITHUB_WORKSPACE/eng_b" \
+            --pool "$GITHUB_WORKSPACE/${{ steps.pool.outputs.path }}" \
+            --pairs "${{ github.event.inputs.pairs }}" \
+            --nodes "${{ github.event.inputs.nodes }}" \
+            --seed "${{ github.event.inputs.seed }}" \
+            $WA $WB \
+            --out "$GITHUB_WORKSPACE/match_result.json"
+
+      - name: Upload result
+        uses: actions/upload-artifact@v4
+        with:
+          name: match-result
+          path: match_result.json
+          retention-days: 90
