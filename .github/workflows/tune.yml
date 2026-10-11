@@ -1,0 +1,72 @@
+name: tune-hce2
+
+# Manual start. Downloads all shard artifacts of a datagen run, fits HCE v2 weights
+# (Texel-style, outcome labels), uploads hce2_weights.txt and tune_report.json.
+on:
+  workflow_dispatch:
+    inputs:
+      datagen_run_id:
+        description: "run id of the datagen workflow run (from its URL)"
+        required: true
+      epochs:
+        description: "training epochs"
+        required: true
+        default: "400"
+      lr:
+        description: "Adam learning rate"
+        required: true
+        default: "0.05"
+      l2:
+        description: "L2 penalty"
+        required: true
+        default: "0.00001"
+
+jobs:
+  tune:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install numpy
+        run: pip install numpy
+
+      - name: Build HCE v2 engine (dump mode)
+        run: g++ -std=c++17 -O2 -pthread build_2_dev.cpp -o eng2
+
+      - name: Download shards
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh run download "${{ github.event.inputs.datagen_run_id }}" \
+            --repo "$GITHUB_REPOSITORY" -p "shard-*" -D shards
+          ls -R shards | head -50
+
+      - name: Tune
+        run: |
+          FILES=$(ls shards/*/positions_*.tsv.gz | paste -sd, -)
+          echo "files: $FILES"
+          python3 tune.py \
+            --engine eng2 \
+            --positions "$FILES" \
+            --out hce2_weights.txt \
+            --report tune_report.json \
+            --epochs "${{ github.event.inputs.epochs }}" \
+            --lr "${{ github.event.inputs.lr }}" \
+            --l2 "${{ github.event.inputs.l2 }}"
+
+      - name: Upload weights and report
+        uses: actions/upload-artifact@v4
+        with:
+          name: hce2-weights
+          path: |
+            hce2_weights.txt
+            tune_report.json
+          retention-days: 90
