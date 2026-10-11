@@ -30,7 +30,7 @@ jobs:
       - name: Check and filter openings
         run: |
           python3 check_openings.py \
-            --engine eng \
+            --engine ./eng \
             --pool opening_pool_0001.txt \
             --nodes "${{ github.event.inputs.nodes }}" \
             --max_cp 100 \
