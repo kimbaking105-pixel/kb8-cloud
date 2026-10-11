@@ -11,6 +11,12 @@ for path in sorted(glob.glob("results/**/match_*.txt", recursive=True)):
     w, d, l = map(int, m.groups())
     W += w; D += d; L += l
     parts.append(f"{path}: W={w} D={d} L={l}")
+# Optional: add an earlier batch, e.g. PRIOR_WDL="620 425 555" in the workflow env.
+prior = os.environ.get("PRIOR_WDL", "").split()
+if len(prior) == 3:
+    pw, pd, pl = map(int, prior)
+    W += pw; D += pd; L += pl
+    parts.insert(0, f"earlier batch (added): W={pw} D={pd} L={pl}")
 n = W + D + L
 score = (W + 0.5 * D) / max(1, n)
 # approximate z for score difference vs 0.5 (draw-aware variance)
