@@ -54,7 +54,7 @@ jobs:
           FILES=$(ls shards/*/positions_*.tsv.gz | paste -sd, -)
           echo "files: $FILES"
           python3 tune.py \
-            --engine eng2 \
+            --engine ./eng2 \
             --positions "$FILES" \
             --out hce2_weights.txt \
             --report tune_report.json \
