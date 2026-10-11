@@ -24,7 +24,7 @@ var = (W * (1 - score) ** 2 + L * score ** 2 + D * (0.5 - score) ** 2) / max(1, 
 z = (score - 0.5) / math.sqrt(var / max(1, n)) if var > 0 else 0.0
 elo = -400 * math.log10(1 / score - 1) if 0 < score < 1 else float("nan")
 lines = [
-    "PATCH MATCH SUMMARY (candidate vs frozen base, fixed nodes, cap 200)",
+    os.environ.get("SUMMARY_TITLE", "PATCH MATCH SUMMARY (candidate vs frozen base, fixed nodes, cap 200)"),
     f"games={n} candidate_W={W} D={D} candidate_L={L}",
     f"candidate_score={score:.4f}",
     f"approx_elo_diff={elo:.1f}",
