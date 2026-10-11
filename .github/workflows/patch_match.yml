@@ -9,7 +9,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [0, 1, 2, 3, 4, 5, 6, 7]
+        shard: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
     steps:
       - uses: actions/checkout@v4
       - name: Setup
@@ -20,27 +20,42 @@ jobs:
           chmod +x base cand
       - name: Match shard ${{ matrix.shard }} (50 pairs = 100 games)
         run: |
-          mkdir -p results
-          python3 run_match.py ./base ./cand 50 8192 200 $((1000 + ${{ matrix.shard }})) results/match_${{ matrix.shard }}.txt
-          head -1 results/match_${{ matrix.shard }}.txt
+          mkdir -p results/shard
+          python3 run_match.py ./base ./cand 50 8192 200 $((2000 + ${{ matrix.shard }})) results/shard/match_${{ matrix.shard }}.txt
+          head -1 results/shard/match_${{ matrix.shard }}.txt
       - uses: actions/upload-artifact@v4
         with:
           name: match-${{ matrix.shard }}
-          path: results/match_${{ matrix.shard }}.txt
+          path: results/shard/match_${{ matrix.shard }}.txt
+
+  speed:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build and speed check
+        run: |
+          g++ -std=c++17 -O2 -pthread engine_base.cpp -o base
+          g++ -std=c++17 -O2 -pthread engine_mdp.cpp -o cand
+          chmod +x base cand
+          mkdir -p results/speed
+          python3 speed_check.py ./base ./cand results/speed/speed.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: speed-result
+          path: results/speed/speed.txt
 
   summary:
-    needs: match
+    needs: [match, speed]
+    if: always()
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
-          pattern: match-*
           path: results
-          merge-multiple: true
       - name: Summary
-        run: |
-          python3 summarize.py
+        run: python3 summarize.py
       - uses: actions/upload-artifact@v4
         with:
           name: patch-match-summary
